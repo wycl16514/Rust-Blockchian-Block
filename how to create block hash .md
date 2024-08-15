@@ -148,7 +148,7 @@ pub fn search_block(&self, search: BlockSearch) -> BlockSearchResult {
                     }
 
                     if idx >= self.chain.len() {
-                        return BlockSearchResult::FailOfIndex(idx);
+                        return BlockSearchResult::FailOfIndex(index);
                     }
                 }
                 /*
@@ -192,7 +192,7 @@ pub fn search_block(&self, search: BlockSearch) -> BlockSearchResult {
                         return BlockSearchResult::Success(block);
                     }
 
-                    if idx >= self.chain.len() {
+                    if index >= self.chain.len() {
                         return BlockSearchResult::FailOfTimeStamp(time_stamp);
                     }
                 }
@@ -223,3 +223,105 @@ then the hash value will be attached to the tag value of SearchByBlockHash, and 
 
 And the owershi of the hash vector will transfer from the input parameter to the local variable hash, this will cause problem that is when the loop exectue the second time, the hash vector that is passing through from the
 parameter will invalidated, and if we don't return from the first loop, the code will fail at the second loop, that is why we using the "ref" keyword which means we convert the local variable in the match arm  BlockSearch::SearchByBlockHash(ref hash) => {...}  that is the local variable "hash" is a reference, then it will not cause the ownership transfer.
+
+Then we go to main.rs and use code to call the function aboved as following:
+```js
+pub mod blockchain;
+use blockchain::{Block, BlockChain, BlockSearch, BlockSearchResult};
+use sha2::{Digest, Sha256};
+
+fn get_block_search_result(result: BlockSearchResult) {
+    match result {
+        BlockSearchResult::Success(block) => {
+            println!("find given block: {:?}", block);
+        }
+
+        BlockSearchResult::FailOfEmptyBlocks => {
+            println!("no block in the chain");
+        }
+
+        BlockSearchResult::FailOfIndex(idx) => {
+            println!("fail to find block with index: {}", idx);
+        }
+
+        BlockSearchResult::FailOfPreviousHash(hash) => {
+            println!("not block hash given previous hash: {:?}", hash);
+        }
+
+        BlockSearchResult::FailOfBlockHash(hash) => {
+            println!("not block has hash as :{:?}", hash);
+        }
+
+        BlockSearchResult::FailOfNonce(nonce) => {
+            println!("not block has nonce with value: {}", nonce);
+        }
+
+        BlockSearchResult::FailOfTimeStamp(time_stamp) => {
+            println!("not block has given time stamp: {}", time_stamp);
+        }
+
+        BlockSearchResult::FailOfTransaction(tx) => {
+            println!("not block contains given trasaction: {:?}", tx);
+        }
+    }
+}
+
+fn main() {
+    let b = Block::new(0, vec![0 as u8; 32]);
+    println!("block hash : {:?}", b.hash());
+
+    let mut block_chain = BlockChain::new();
+    println!("block chain: {:?}", block_chain);
+    block_chain.print();
+
+    let previous_hash = block_chain.last_block().hash();
+    let hash_to_find = previous_hash.clone();
+
+    block_chain.create_block(1, previous_hash);
+    block_chain.print();
+    let previous_hash = block_chain.last_block().hash();
+    block_chain.create_block(2, previous_hash);
+    block_chain.print();
+
+    let result = block_chain.search_block(BlockSearch::SearchByIndex(1));
+    get_block_search_result(result);
+
+    let result = block_chain.search_block(BlockSearch::SearchByIndex(5));
+    get_block_search_result(result);
+
+    let result = block_chain.search_block(BlockSearch::SearchByBlockHash(hash_to_find));
+    get_block_search_result(result);
+}
+
+```
+
+The get_block_search_result is used to analyze the return from search_block block, it need to check all possible cases that are defined in BlockSearchResult, Since there are 8 cases in it, then we we use match to hande each
+case, we have to consider 8 cases. If the tag value is Success which means given block is found, then we can get the reference of the block from the attachment of the tag value. Otherwise the search fail and the given tag
+value indicates the fail reason, and give out the search condition that cause the search to fail. For example if the tag value is FailOfIndex, then we can get the index value used for the searching from the attachemnt of the
+tag value.
+
+Running aboved code we can get the following result:
+```rs
+*************************
+========================= Chain 0  =========================
+timestamp: 17ebea17bfbfc470
+nonce:      0,
+previous_hash:    [35, 17, 204, 91, 108, 147, 239, 78, 46, 113, 209, 244, 106, 143, 122, 217, 44, 226, 253, 118, 68, 255, 132, 195, 203, 232, 62, 80, 111, 88, 88, 23]
+transactions:     []
+========================= Chain 1  =========================
+timestamp: 17ebea17bfc08ba8
+nonce:      1,
+previous_hash:    [249, 220, 134, 38, 186, 179, 167, 147, 130, 1, 246, 52, 153, 238, 129, 90, 12, 175, 73, 246, 186, 235, 85, 67, 17, 249, 87, 236, 196, 146, 135, 173]
+transactions:     []
+========================= Chain 2  =========================
+timestamp: 17ebea17bfc26838
+nonce:      2,
+previous_hash:    [125, 7, 68, 249, 127, 52, 56, 253, 36, 154, 66, 72, 236, 67, 210, 104, 11, 15, 251, 12, 161, 200, 107, 248, 52, 103, 35, 162, 120, 212, 207, 26]
+transactions:     []
+*************************
+find given block: Block { nonce: 1, previous_hash: [249, 220, 134, 38, 186, 179, 167, 147, 130, 1, 246, 52, 153, 238, 129, 90, 12, 175, 73, 246, 186, 235, 85, 67, 17, 249, 87, 236, 196, 146, 135, 173], time_stamp: 1723728670121561000, transactions: [] }
+fail to find block with index: 5
+find given block: Block { nonce: 0, previous_hash: [35, 17, 204, 91, 108, 147, 239, 78, 46, 113, 209, 244, 106, 143, 122, 217, 44, 226, 253, 118, 68, 255, 132, 195, 203, 232, 62, 80, 111, 88, 88, 23], time_stamp: 1723728670121510000, transactions: [] }
+```
+
+As you can see, when we use index 5 to seach block, we get the fail reason with the error index 5.
